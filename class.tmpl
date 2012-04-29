@@ -1,0 +1,324 @@
+{!
+	var classType = "";
+	
+	/** find symbol wiki page if it exists */
+	function findType(str) { 
+		if(publish.classArray.indexOf(str) !== -1) {
+			return "*[[" + str + "]]*";
+		}
+		//print(publish.classArray.toString());
+		return "_" + str + "_";
+	}		
+
+	function findFile(str) {
+		//print(str.replace(/\\/g, "/").lastIndexOf("/"));
+		var fileName = str.substring(str.replace(/\\/g, "/").lastIndexOf("/") + 1);
+		return "[" + fileName + "](../blob/master/" + fileName + ")";
+	}
+	/*
+	if (data.isBuiltin()) {
+		classType += "Built-In ";
+	}
+	
+	if (data.isNamespace) {
+		if (data.is('FUNCTION')) {
+			classType += "Function ";
+		}
+		classType += "Namespace ";
+	}
+	else {
+		classType += "Class ";
+	}
+	output += classType + "**" + data.alias + "**";
+	*/
+	if(data.augments.length) {
+	output += " _extends_ "
+	output += data.augments
+		.sort()
+		.map(
+			function($) { return "[[" + $ + "]]"; }
+		)
+		.join(", ") + "  \n";
+	}
+	if(data.version) {
+		output += "  \nVersion " + data.version;
+	}
+	output += "  \n" + data.classDesc + "  \n";
+	if(!data.isBuiltin()) {
+		output += "_Defined in_ " + findFile(data.srcFile) + "  \n";
+	}
+	if(!data.isBuiltin() && (data.isNamespace || data.is('CONSTRUCTOR'))) {
+		output += "### " + classType + " Summary";
+		output += "<table><tr><td>";
+		if (data.isPrivate) output += "&lt;private&gt; ";
+		if (data.isInner) output += "&lt;inner&gt; ";
+		output += "</td><td>";
+		output += "[" + data.alias + "](#constructor)";
+		if(!data.isNamespace) {
+			output += makeSignature(data.params);
+		}
+		output += "<div>" + summarize(data.desc) + "</div></td></tr></table>  \n"		
+	}
+
+	var ownMethods = data.methods.filter(function($){return $.memberOf == data.alias  && !$.isNamespace}).sort(makeSortby("name"));
+	var ownProperties = data.properties.filter(function($){return $.memberOf == data.alias && !$.isNamespace}).sort(makeSortby("name"));
+	var ownEvents = data.events.filter(function($){return $.memberOf == data.alias  && !$.isNamespace}).sort(makeSortby("name"));
+
+	var inheritedMethods = data.methods.filter(function($){return $.memberOf != data.alias  && !$.isNamespace}).sort(makeSortby("name"));
+	var inheritedProperties = data.properties.filter(function($){return $.memberOf != data.alias && !$.isNamespace}).sort(makeSortby("name"));
+	var inheritedEvents = data.events.filter(function($){return $.memberOf != data.alias  && !$.isNamespace}).sort(makeSortby("name"));
+	var allinherited = [];
+	if(inheritedMethods && inheritedMethods.length) {
+		inheritedMethods.dataName = "methods";
+		inheritedMethods.name = "Methods";
+		allinherited.push(inheritedMethods);
+	}
+	if(inheritedProperties && inheritedProperties.length) {
+		inheritedProperties.dataName = "properties";
+		inheritedProperties.name = "Properties";
+		allinherited.push(inheritedProperties);
+	}
+	if(inheritedEvents && inheritedEvents.length) {
+		inheritedEvents.dataName = "events";
+		inheritedEvents.name = "Events";
+		allinherited.push(inheritedEvents);
+	}
+	
+	var allmembers = [];
+	if(ownMethods && ownMethods.length) {
+		ownMethods.name = "Method";
+		ownMethods.dataName = "methods";
+		ownMethods.sign = true;					
+		allmembers.push(ownMethods);
+	}
+
+	if(ownProperties && ownProperties.length) {
+		ownProperties.name = "Property";
+		ownProperties.dataName = "properties";					
+		allmembers.push(ownProperties);
+	}
+	
+	if(ownEvents && ownEvents.length) {
+		ownEvents.name = "Event";
+		ownEvents.dataName = "events";
+		allmembers.push(ownEvents);
+	}
+	for(var i = 0; i < allmembers.length; i++) {
+		if(allmembers[i].length) {
+			output += "### " + allmembers[i].name + " Summary<table>";
+			for(var m = 0; m < allmembers[i].length; m++) {
+				var member = allmembers[i][m];
+				output += "<tr><td>\n";
+				if (member.isPrivate) output += "&lt;private&gt; ";
+				if (member.isInner) output += "&lt;inner&gt; ";
+				if (member.isStatic) output += "&lt;static&gt; ";
+				if (member.type) output += findType(member.type);
+				// if (member.returns.length === 1) output += "_[[" + member.returns[0].type + "]]_";
+				/*if(member.isStatic && member.memberOf !== "_global_") {
+					output += member.memberOf + ".";
+				}*/
+				output += "</td><td>";
+				output += "**[" + member.name.replace(/\^\d+$/, '') +  "](#" + member.name.replace(/\^\d+$/, '') + ")**";
+				if(member.params.length) {
+					output += " " + makeSignature(member.params);					
+				}
+				output += "  \n";
+				output += summarize(member.desc) + "</td></tr>";
+			}
+			output += "</table>  \n";
+		}
+	}
+	if(data.inheritsFrom.length) {
+		for(var i = 0; i < allinherited.length; i++) {
+			var memberlist = allinherited[i];
+			var contributers = [];
+			memberlist.map(function($) {if (contributers.indexOf($.memberOf) < 0) contributers.push($.memberOf)});
+			for (var i = 0, l = contributers.length; i < l; i++) {
+				output +=
+					"#### " + memberlist.name + " inherited from [[" + contributers[i] + "]]:  \n"
+					+
+					memberlist
+					.filter(
+						function($) { return $.memberOf == contributers[i] }
+					)
+					.sort(makeSortby("name"))
+					.map(
+						function($) { return "[[" + $.name + "|" + contributers[i] + "#wiki-" + $.name + "]]" }
+					)
+					.join(", ") + "  \n";
+			}
+		}
+	}
+	if(!data.isBuiltin() && (data.isNamespace || data.is('CONSTRUCTOR'))) {
+		output += "  \n### " + classType + " Detail  \n";
+		if (data.isPrivate) output += "&lt;private&gt; ";
+		if (data.isInner) output += "&lt;inner&gt; ";
+		output += "**" + data.alias + "**";
+		if(!data.isNamespace) {
+			output += makeSignature(data.params);
+		}
+		output += "  \n";
+		output += data.desc + "  \n";
+		if(data.author) {
+			output += "Author: _" + data.author + "_  \n";
+		}
+		if(data.example) {
+			for(var i = 0; i < data.example.length; i++) {
+				output += "### Example:  \n";
+				output += "```javascript\n";
+				output += data.example[i] + "\n```\n";
+			}
+		}
+		if(data.params.length) {
+			output += "### Parameters:  \n";
+			for(var i = 0; i < data.params.length; i++) {
+				var item = data.params[i];
+				if(item.type) { output += "{" + findType(item.type) + "} "; }
+				output += item.name;
+				if(item.isOptional) { output += " _optional_" }
+				if(item.defaultValue) { output += ", _default_: " + item.defaultValue; }
+				output += "  \n";
+			}
+		}	
+		if(data.deprecated){
+			output += "### Deprecated:  \n";
+			output += data.deprecated + "  \n";
+		}
+		if(data.since){
+			output += "### Since:  \n";
+			output += data.since + "  \n";			
+		}
+		if(data.exceptions.length) {
+			output += "### Throws:\n";
+			for(var i = 0; i < data.exceptions.length; i++) {
+				var item = data.exceptions[i];	
+				output += item.type ? "{" + findType(item.type) + "} " : "";
+				output += "**" + item.name + "**  \n";
+				output += item.desc + "  \n";
+			}
+		}
+		if(data.returns.length) { 
+			output += "### Returns:\n";
+			for(var i = 0; i < data.returns[i]; i++) {
+				var item = data.returns[i];
+				output += item.type ? "{" + findType(item.type) + "} " : "";
+				output += item.name + "  \n";
+				output += item.desc + "  \n";
+			}
+		}
+		if(data.requires.length) {
+			output += "### Requires:\n";
+			for(var i = 0; i < data.requires[i]; i++) {
+				var item = data.requires[i];
+				output += item.type ? "{" + findType(item.type) + "} " : "";
+				output += item.name + "  \n";
+				output += item.desc + "  \n";
+			}
+		}
+		if(data.see.length) {
+			output += "### See:\n";
+			for(var i = 0; i < data.see.length; i++) {
+				output += "[[" +  data.see[i] + "]]  \n";
+			}
+		}
+	}
+	output += "- - -\n";
+	for(var m = 0; m < allmembers.length; m++) {
+		var memberlist = allmembers[m];
+		output += "### " + memberlist.name + " Detail\n";
+		for(var mm = 0; mm < memberlist.length; mm++) {
+			var member = memberlist[mm];
+			if (member.isPrivate) output += "&lt;private&gt; ";
+			if (member.isInner) output += "&lt;inner&gt; ";
+			if (member.isStatic) output += "&lt;static&gt; ";
+			//if (member.type) output += member.type;
+			//if (member.returns.length === 1) output += "_[[" + member.returns[0].type + "]]_";
+
+			
+			output += "<a id='" + member.name.replace(/\^\d+$/, '') + "' />";
+			output += member.type ? "{" + findType(member.type) + "} " : "";
+			if(member.isStatic && member.memberOf != '_global_') {
+				output += member.memberOf + ".";
+			}	
+			output += "**" + member.name.replace(/\^\d+$/, '') + "**";
+			if(member.params.length) {
+				output += " " + makeSignature(member.params);
+			}
+			output += "  \n";
+			output += member.desc + "  \n";
+			if(member.srcFile != member.srcFile) {
+				output += "*Defined in: " + member.srcFile + "*  \n"; 
+			}
+			if(member.author) {
+				output += "_Author_: " + member.author + "  \n";
+			}
+			if(member.example) {
+				for(var i = 0; i < member.example.length; i++) {
+					output += "#### Example:  \n";
+					output += "```javascript\n";
+					output += member.example[i] + "\n```\n";
+				}
+			}
+			if(member.params.length) {
+				output += "#### Parameters:  \n";
+				for(var i = 0; i < member.params.length; i++) {
+					var item = member.params[i];
+					if(item.type) { output += "{" + findType(item.type) + "} "; }
+					output += item.name;
+					if(item.isOptional) { output += " _optional_" }
+					if(item.defaultValue) { output += ", _default_: " + item.defaultValue; }
+					output += "  \n";
+				}
+			}	
+			if(member.deprecated){
+				output += "#### Deprecated:  \n";
+				output += member.deprecated + "  \n";
+			}
+			if(member.since){
+				output += "#### Since:  \n";
+				output += member.since + "  \n";			
+			}
+			if(member.exceptions.length) {
+				output += "#### Throws:\n";
+				for(var i = 0; i < member.exceptions.length; i++) {
+					var item = member.exceptions[i];	
+					output += item.type ? "{" + findType(item.type) + "} " : "";
+					output += "**" + item.name + "**  \n";
+					output += item.desc + "  \n";
+				}
+			}
+			if(member.defaultValue) {
+				output += "#### Default Value:\n";
+				output += member.defaultValue + "  \n"; 
+			}
+			if(member.returns.length) { 
+				output += "#### Returns:\n";
+				for(var i = 0; i < member.returns.length; i++) {
+					var item = member.returns[i];
+					output += item.type ? "{" + findType(item.type) + "} " : "";
+					output += item.name + "  \n";
+					output += item.desc + "  \n";
+				}
+			}
+			if(member.requires.length) {
+				output += "#### Requires:\n";
+				for(var i = 0; i < member.requires.length; i++) {
+					var item = member.requires[i];
+					output += item.type ? "{" + findType(item.type) + "} " : "";
+					output += item.name + "  \n";
+					output += item.desc + "  \n";
+				}
+			}
+			if(member.see.length) {
+				output += "#### See:\n";
+				for(var i = 0; i < member.see.length; i++) {
+					output += "[[" +  member.see[i] + "]]  \n";
+				}
+			}
+			if(mm != memberlist.length -1) {
+				output += "\n--\n";
+			}
+		}
+		output += "- - -\n";		
+	}
+!}
